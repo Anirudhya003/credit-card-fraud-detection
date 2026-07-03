@@ -271,14 +271,15 @@ def model_info():
 
 # ==================== MAIN ====================
 
+# Load the model when the application starts (works for Gunicorn and Flask)
+if not load_artifacts():
+    raise RuntimeError("Failed to load model. Run 'python run_pipeline.py' first.")
+
 if __name__ == "__main__":
     print("=" * 60)
     print("CREDIT CARD FRAUD DETECTION - WEB APPLICATION")
     print("=" * 60)
+    print("\nStarting server at http://localhost:5000")
+    print("=" * 60)
 
-    if load_artifacts():
-        print("\nStarting server at http://localhost:5000")
-        print("=" * 60)
-        app.run(debug=False, host="0.0.0.0", port=5000)
-    else:
-        print("Failed to load model. Run `python run_pipeline.py` first.")
+    app.run(debug=False, host="0.0.0.0", port=5000)
