@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Check - Fraud Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">Fraud Detection System</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">Dashboard</a>
+                <a class="nav-link" href="/predict">Check Transaction</a>
+                <a class="nav-link active" href="/batch">Batch Check</a>
+                <a class="nav-link" href="/alerts">Alerts</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4 mb-5">
+        <h2 class="mb-4">Batch Transaction Check</h2>
+        <div class="row">
+            <!-- Input -->
+            <div class="col-md-5">
+                <div class="card p-3 mb-3">
+                    <h5>Upload CSV</h5>
+                    <input type="file" class="form-control mb-2" id="csvFile" accept=".csv">
+                    <small class="text-muted mb-2 d-block">Columns: transaction_amount (INR), transaction_hour, transaction_day, transaction_month, location_lat, location_lon, device_type, transaction_type, previous_transaction_days, days_since_card_issued</small>
+                    <button class="btn btn-primary w-100" id="uploadBtn">Upload & Analyze</button>
+                </div>
+                <div class="card p-3">
+                    <h5>Or Paste JSON</h5>
+                    <textarea class="form-control mb-2" id="jsonInput" rows="6"
+                              placeholder='[{"transaction_amount":2500,"transaction_hour":14,"transaction_day":15,"transaction_month":6,"location_lat":28.61,"location_lon":77.21,"device_type":"Mobile","transaction_type":"Online","previous_transaction_days":5,"days_since_card_issued":365}]'></textarea>
+                    <button class="btn btn-outline-primary w-100" id="jsonBtn">Analyze JSON</button>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div class="col-md-7">
+                <div id="loading" style="display:none" class="text-center py-5">
+                    <div class="spinner-border text-primary"></div>
+                    <p class="mt-2 text-muted">Analyzing...</p>
+                </div>
+                <div id="results" style="display:none">
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <div class="card text-center p-3">
+                                <h6 class="text-muted">Total</h6>
+                                <h3 id="totalCount">0</h3>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card text-center p-3 border-danger">
+                                <h6 class="text-danger">Fraud Detected</h6>
+                                <h3 id="fraudCount" class="text-danger">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr><th>#</th><th>Probability</th><th>Status</th><th>Action</th></tr>
+                                </thead>
+                                <tbody id="resultsTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <button class="btn btn-success w-100 mt-3" id="exportBtn">Export CSV</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-white text-center py-3 mt-5">
+        <small>Credit Card Fraud Detection System (India) &mdash; ML-Powered | Currency: INR</small>
+    </footer>
+
+    <script>
+        let batchResults = [];
+
+        document.getElementById('uploadBtn').onclick = () => {
+            const file = document.getElementById('csvFile').files[0];
+            if (!file) return alert('Select a CSV file first');
+            const reader = new FileReader();
+            reader.onload = e => {
+                const lines = e.target.result.trim().split('\n');
+                const headers = lines[0].split(',').map(h => h.trim());
+                const txns = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const vals = lines[i].split(',').map(v => v.trim());
+                    const obj = {};
+                    headers.forEach((h, j) => obj[h] = isNaN(vals[j]) ? vals[j] : parseFloat(vals[j]));
+                    txns.push(obj);
+                }
+                analyze(txns);
+            };
+            reader.readAsText(file);
+        };
+
+        document.getElementById('jsonBtn').onclick = () => {
+            try {
+                const txns = JSON.parse(document.getElementById('jsonInput').value);
+                if (!Array.isArray(txns)) return alert('Must be a JSON array');
+                analyze(txns);
+            } catch (e) { alert('Invalid JSON: ' + e.message); }
+        };
+
+        async function analyze(txns) {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+            try {
+                const resp = await fetch('/batch-predict', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({transactions: txns}),
+                });
+                const data = await resp.json();
+                document.getElementById('loading').style.display = 'none';
+                if (data.status === 'success') { batchResults = data.results; showResults(data); }
+                else alert(data.message);
+            } catch (e) { document.getElementById('loading').style.display = 'none'; alert(e.message); }
+        }
+
+        function showResults(data) {
+            document.getElementById('totalCount').textContent = data.total;
+            document.getElementById('fraudCount').textContent = data.fraud_detected;
+            const tbody = document.getElementById('resultsTable');
+            tbody.innerHTML = '';
+            data.results.forEach((r, i) => {
+                const cls = r.is_fraud ? 'table-danger' : '';
+                const badge = r.is_fraud
+                    ? '<span class="badge bg-danger">FRAUD</span>'
+                    : '<span class="badge bg-success">SAFE</span>';
+                tbody.innerHTML += `<tr class="${cls}"><td>${i+1}</td><td>${(r.fraud_probability*100).toFixed(1)}%</td><td>${badge}</td><td>${r.action}</td></tr>`;
+            });
+            document.getElementById('results').style.display = 'block';
+        }
+
+        document.getElementById('exportBtn').onclick = () => {
+            if (!batchResults.length) return;
+            let csv = 'Index,Is_Fraud,Probability(%),Action,Model\n';
+            batchResults.forEach((r, i) => {
+                csv += `${i+1},${r.is_fraud},${(r.fraud_probability*100).toFixed(2)},${r.action},${r.model}\n`;
+            });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+            a.download = 'fraud_results.csv';
+            a.click();
+        };
+    </script>
+</body>
+</html>

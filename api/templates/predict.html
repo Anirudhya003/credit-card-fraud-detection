@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check Transaction - Fraud Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">Fraud Detection System</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">Dashboard</a>
+                <a class="nav-link active" href="/predict">Check Transaction</a>
+                <a class="nav-link" href="/batch">Batch Check</a>
+                <a class="nav-link" href="/alerts">Alerts</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4 mb-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <h2 class="mb-4">Check Transaction</h2>
+                <p class="text-muted mb-4">Enter transaction details to check if it might be fraudulent.</p>
+
+                <div class="card p-4">
+                    <form id="predictionForm">
+                        <div class="row g-3">
+                            <!-- Amount in INR -->
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Transaction Amount (Rs.)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">&#8377;</span>
+                                    <input type="number" class="form-control form-control-lg" name="transaction_amount"
+                                           placeholder="e.g. 2500" step="0.01" min="0" required>
+                                </div>
+                            </div>
+
+                            <!-- Time -->
+                            <div class="col-md-4">
+                                <label class="form-label">Hour (0-23)</label>
+                                <input type="number" class="form-control" name="transaction_hour"
+                                       min="0" max="23" value="14" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Day (1-28)</label>
+                                <input type="number" class="form-control" name="transaction_day"
+                                       min="1" max="28" value="15" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Month (1-12)</label>
+                                <input type="number" class="form-control" name="transaction_month"
+                                       min="1" max="12" value="6" required>
+                            </div>
+
+                            <!-- Location (India defaults) -->
+                            <div class="col-md-6">
+                                <label class="form-label">Latitude</label>
+                                <input type="number" class="form-control" name="location_lat"
+                                       step="0.0001" value="28.6139" required>
+                                <small class="text-muted">India: 8 to 35</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Longitude</label>
+                                <input type="number" class="form-control" name="location_lon"
+                                       step="0.0001" value="77.2090" required>
+                                <small class="text-muted">India: 68 to 97</small>
+                            </div>
+
+                            <!-- Device & Type -->
+                            <div class="col-md-6">
+                                <label class="form-label">Device Type</label>
+                                <select class="form-select" name="device_type" required>
+                                    <option value="Mobile">Mobile</option>
+                                    <option value="Desktop">Desktop</option>
+                                    <option value="ATM">ATM</option>
+                                    <option value="POS">POS Terminal</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Transaction Type</label>
+                                <select class="form-select" name="transaction_type" required>
+                                    <option value="Online">Online</option>
+                                    <option value="In-Store">In-Store</option>
+                                    <option value="ATM_Withdrawal">ATM Withdrawal</option>
+                                </select>
+                            </div>
+
+                            <!-- History -->
+                            <div class="col-md-6">
+                                <label class="form-label">Days Since Last Transaction</label>
+                                <input type="number" class="form-control" name="previous_transaction_days"
+                                       min="0" value="5" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Days Since Card Issued</label>
+                                <input type="number" class="form-control" name="days_since_card_issued"
+                                       min="0" value="365" required>
+                            </div>
+
+                            <!-- Submit -->
+                            <div class="col-12 mt-3">
+                                <button type="submit" class="btn btn-primary btn-lg w-100">Analyze Transaction</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Result -->
+                <div id="resultBox" class="mt-4" style="display:none;"></div>
+
+                <!-- Test Examples -->
+                <div class="card mt-4 p-3">
+                    <h5>Quick Test Examples</h5>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <button class="btn btn-outline-success btn-sm w-100" onclick="fillLegit()">
+                                Normal (Rs 1,500)
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-outline-warning btn-sm w-100" onclick="fillSuspicious()">
+                                Suspicious (Rs 2,50,000)
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-outline-danger btn-sm w-100" onclick="fillFraud()">
+                                Likely Fraud (Rs 50,00,000)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-white text-center py-3 mt-5">
+        <small>Credit Card Fraud Detection System (India) &mdash; ML-Powered | Currency: INR</small>
+    </footer>
+
+    <script>
+        function formatINR(num) {
+            return Number(num).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+
+        document.getElementById('predictionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const fd = new FormData(this);
+            const data = {
+                transaction_amount:        parseFloat(fd.get('transaction_amount')),
+                transaction_hour:          parseInt(fd.get('transaction_hour')),
+                transaction_day:           parseInt(fd.get('transaction_day')),
+                transaction_month:         parseInt(fd.get('transaction_month')),
+                location_lat:              parseFloat(fd.get('location_lat')),
+                location_lon:              parseFloat(fd.get('location_lon')),
+                device_type:               fd.get('device_type'),
+                transaction_type:          fd.get('transaction_type'),
+                previous_transaction_days: parseInt(fd.get('previous_transaction_days')),
+                days_since_card_issued:    parseInt(fd.get('days_since_card_issued')),
+            };
+
+            try {
+                const resp = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data),
+                });
+                const result = await resp.json();
+                result._amount = data.transaction_amount;
+                showResult(result);
+            } catch (err) {
+                document.getElementById('resultBox').innerHTML =
+                    `<div class="alert alert-danger">Error: ${err.message}</div>`;
+                document.getElementById('resultBox').style.display = 'block';
+            }
+        });
+
+        function showResult(r) {
+            const box = document.getElementById('resultBox');
+            const prob = (r.fraud_probability * 100).toFixed(2);
+            const cls = r.is_fraud ? 'danger' : 'success';
+            const label = r.is_fraud ? 'FRAUD DETECTED' : 'LEGITIMATE';
+
+            box.innerHTML = `
+                <div class="card border-${cls}">
+                    <div class="card-header bg-${cls} text-white"><h5 class="mb-0">${label}</h5></div>
+                    <div class="card-body">
+                        <div class="row text-center mb-3">
+                            <div class="col-md-4">
+                                <h6 class="text-muted">Fraud Probability</h6>
+                                <h3>${prob}%</h3>
+                                <div class="progress"><div class="progress-bar bg-${cls}" style="width:${prob}%"></div></div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6 class="text-muted">Decision</h6>
+                                <h4><span class="badge bg-${cls}">${r.action}</span></h4>
+                            </div>
+                            <div class="col-md-4">
+                                <h6 class="text-muted">Model</h6>
+                                <h4>${r.model}</h4>
+                            </div>
+                        </div>
+                        ${r.is_fraud
+                            ? '<div class="alert alert-warning">This transaction has been flagged as fraudulent. Contact the cardholder immediately for verification.</div>'
+                            : '<div class="alert alert-info">Transaction appears safe to process.</div>'}
+                    </div>
+                </div>`;
+            box.style.display = 'block';
+            box.scrollIntoView({behavior: 'smooth'});
+        }
+
+        function fillForm(vals) {
+            for (const [k, v] of Object.entries(vals)) {
+                const el = document.querySelector(`[name="${k}"]`);
+                if (el) el.value = v;
+            }
+        }
+
+        function fillLegit() {
+            fillForm({
+                transaction_amount: 1500, transaction_hour: 14,
+                transaction_day: 15, transaction_month: 6,
+                location_lat: 28.6139, location_lon: 77.2090,
+                device_type: 'Mobile', transaction_type: 'Online',
+                previous_transaction_days: 3, days_since_card_issued: 730,
+            });
+        }
+
+        function fillSuspicious() {
+            fillForm({
+                transaction_amount: 250000, transaction_hour: 3,
+                transaction_day: 10, transaction_month: 2,
+                location_lat: 55.0, location_lon: 37.0,
+                device_type: 'Mobile', transaction_type: 'Online',
+                previous_transaction_days: 0, days_since_card_issued: 15,
+            });
+        }
+
+        function fillFraud() {
+            fillForm({
+                transaction_amount: 5000000, transaction_hour: 3,
+                transaction_day: 5, transaction_month: 1,
+                location_lat: -35.0, location_lon: 140.0,
+                device_type: 'ATM', transaction_type: 'ATM_Withdrawal',
+                previous_transaction_days: 90, days_since_card_issued: 10,
+            });
+        }
+    </script>
+</body>
+</html>

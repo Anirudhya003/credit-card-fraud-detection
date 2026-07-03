@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Alerts - Fraud Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">Fraud Detection System</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">Dashboard</a>
+                <a class="nav-link" href="/predict">Check Transaction</a>
+                <a class="nav-link" href="/batch">Batch Check</a>
+                <a class="nav-link active" href="/alerts">Alerts</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4 mb-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Fraud Alerts</h2>
+            <button class="btn btn-outline-danger btn-sm" id="clearBtn">Clear All</button>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h6 class="text-muted">Total Alerts</h6>
+                    <h3 id="totalAlerts">0</h3>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h6 class="text-muted">Avg Fraud Score</h6>
+                    <h3 id="avgScore">0%</h3>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h6 class="text-muted">Total Amount (INR)</h6>
+                    <h3 id="totalAmount">&#8377;0</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Alert ID</th>
+                            <th>Time</th>
+                            <th>Amount (INR)</th>
+                            <th>Fraud Score</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alertsTable"></tbody>
+                </table>
+            </div>
+            <div id="emptyMsg" class="p-3 text-center text-success">No alerts yet.</div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-white text-center py-3 mt-5">
+        <small>Credit Card Fraud Detection System (India) &mdash; ML-Powered | Currency: INR</small>
+    </footer>
+
+    <script>
+        function formatINR(num) {
+            return Number(num).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+
+        document.addEventListener('DOMContentLoaded', loadAlerts);
+        setInterval(loadAlerts, 5000);
+
+        document.getElementById('clearBtn').onclick = () => {
+            if (!confirm('Clear all alerts?')) return;
+            fetch('/api/alerts/clear', {method:'POST'}).then(() => loadAlerts());
+        };
+
+        function loadAlerts() {
+            fetch('/api/alerts').then(r => r.json()).then(data => {
+                const alerts = data.alerts || [];
+                document.getElementById('totalAlerts').textContent = data.total;
+
+                const tbody = document.getElementById('alertsTable');
+                const empty = document.getElementById('emptyMsg');
+
+                if (!alerts.length) {
+                    tbody.innerHTML = '';
+                    empty.style.display = 'block';
+                    document.getElementById('avgScore').textContent = '0%';
+                    document.getElementById('totalAmount').innerHTML = '&#8377;0';
+                    return;
+                }
+                empty.style.display = 'none';
+
+                const avg = (alerts.reduce((s, a) => s + a.probability, 0) / alerts.length * 100).toFixed(1);
+                const total = alerts.reduce((s, a) => s + Number(a.amount), 0);
+                document.getElementById('avgScore').textContent = avg + '%';
+                document.getElementById('totalAmount').innerHTML = '&#8377;' + formatINR(total);
+
+                tbody.innerHTML = '';
+                alerts.slice().reverse().forEach(a => {
+                    tbody.innerHTML += `<tr class="table-danger">
+                        <td><strong>${a.alert_id}</strong></td>
+                        <td><small>${a.timestamp}</small></td>
+                        <td><strong>&#8377;${formatINR(a.amount)}</strong></td>
+                        <td><span class="badge bg-danger">${(a.probability*100).toFixed(1)}%</span></td>
+                        <td>${a.action}</td>
+                    </tr>`;
+                });
+            }).catch(() => {});
+        }
+    </script>
+</body>
+</html>
